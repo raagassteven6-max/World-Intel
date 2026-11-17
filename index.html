@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a111a">
+  <meta name="description" content="God's Eye Control — an interactive 3D geospatial observation console. Phase 1: foundation with clearly labelled simulated sample data.">
+  <title>God's Eye Control</title>
+
+  <link rel="preconnect" href="https://cesium.com">
+  <link rel="preconnect" href="https://tile.openstreetmap.org" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+
+  <!-- CesiumJS (kept from your prototype). Loaded as a normal script so `Cesium` exists before our modules run. -->
+  <link rel="stylesheet" href="https://cesium.com/downloads/cesiumjs/releases/1.132/Build/Cesium/Widgets/widgets.css">
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.132/Build/Cesium/Cesium.js"></script>
+
+  <!-- Our CSS. main.css must be first: it declares the cascade-layer order. -->
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/panels.css">
+  <link rel="stylesheet" href="css/globe.css">
+
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+
+<!-- Icon sprite: one set of shapes reused everywhere (no icon font, no emoji) -->
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 16 9 5 9-5"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="m5 5 14 14M19 5 5 19"/></symbol>
+  <symbol id="i-plane" viewBox="0 0 24 24"><path d="M12 2.5 14 9l7 4v2l-7-1.5-.5 5 2.5 1.8V22L12 21l-4 .8v-1.7l2.5-1.8-.5-5L3 15v-2l7-4 2-6.5Z"/></symbol>
+  <symbol id="i-ship" viewBox="0 0 24 24"><path d="M12 3v9M8 7h8"/><path d="M3 14h18l-2.5 5.5h-13L3 14Z"/></symbol>
+  <symbol id="i-sat" viewBox="0 0 24 24"><rect x="10" y="10" width="4" height="4"/><rect x="2.5" y="10.5" width="6" height="3"/><rect x="15.5" y="10.5" width="6" height="3"/><path d="M8.5 12H10M14 12h1.5"/></symbol>
+  <symbol id="i-quake" viewBox="0 0 24 24"><path d="M2 12h4l2.5-6 3 12 3-9 2 3h5.5"/></symbol>
+  <symbol id="i-fire" viewBox="0 0 24 24"><path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3.2 2-4.2.3 1.4.9 2 1.7 2.2C10.3 8.5 10.5 5.5 12 3Z"/></symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18a4.5 4.5 0 0 1-.6-9A6 6 0 0 1 18 9.5 4.3 4.3 0 0 1 17.5 18H7Z"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s6-5.6 6-11a6 6 0 0 0-12 0c0 5.4 6 11 6 11Z"/><circle cx="12" cy="10" r="2.2"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="12" rx="2"/><circle cx="12" cy="13" r="3.2"/><path d="M8.5 7 10 4.5h4L15.5 7"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></symbol>
+  <symbol id="i-center" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v5M12 16v5M3 12h5M16 12h5"/></symbol>
+  <symbol id="i-path" viewBox="0 0 24 24"><path d="M4 19c4 0 3-8 8-8s4-6 8-6"/><circle cx="4" cy="19" r="1.5"/><circle cx="20" cy="5" r="1.5"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 11 9-7 9 7"/><path d="M5.5 10v10h13V10"/></symbol>
+  <symbol id="i-north" viewBox="0 0 24 24"><path d="m12 3 4.5 10h-9L12 3Z"/><path d="M12 15v6"/></symbol>
+  <symbol id="i-follow" viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z"/><circle cx="12" cy="12" r="2.8"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6.5 7l1 13h9l1-13"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4.5M12 17.2v.3"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M15 4v16"/></symbol>
+  <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></symbol>
+</svg>
+
+<a class="skip" href="#globe">Skip to the globe</a>
+
+<div id="app" data-left="closed" data-right="closed">
+
+  <!-- A. TOP COMMAND BAR -->
+  <header class="cmdbar" id="cmdbar" data-search="closed">
+    <button id="btn-layers" type="button" class="btn btn--icon cmdbar__menu"
+            aria-controls="panel-layers" aria-expanded="false" aria-label="Data layers panel">
+      <svg class="icon" aria-hidden="true"><use href="#i-layers"/></svg>
+    </button>
+
+    <div class="cmdbar__brand brand">
+      <h1 class="brand__name"><svg class="icon brand__mark" aria-hidden="true"><use href="#i-follow"/></svg> God's Eye Control</h1>
+      <span class="brand__phase">PH.1</span>
+    </div>
+
+    <div class="cmdbar__info">
+      <div class="cmdbar__status">
+        <span id="sys-status" class="chip chip--off" role="status">Starting</span>
+        <span id="src-count" title="Data sources running: live · simulated · local"></span>
+      </div>
+
+      <div class="cmdbar__clocks" role="group" aria-label="Clocks">
+        <span class="clock"><span class="clock__k">UTC</span><time id="clock-utc">--:--:--</time></span>
+        <span class="clock"><span class="clock__k">LOC</span><time id="clock-loc">--:--:--</time></span>
+      </div>
+    </div>
+
+    <form id="search-form" class="cmdbar__search search" role="search" autocomplete="off">
+      <div class="search__row">
+        <label class="sr-only" for="search-input">Search places, coordinates, aircraft, vessels, satellites, tracked items</label>
+        <input id="search-input" class="field" type="search" enterkeyhint="search"
+               placeholder="Place, lat/lon, callsign…"
+               aria-controls="search-results" aria-expanded="false" spellcheck="false">
+        <button class="btn btn--icon" type="submit" aria-label="Search">
+          <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+        </button>
+      </div>
+      <div id="search-results" class="search__results" hidden></div>
+    </form>
+
+    <div class="cmdbar__tools">
+      <button id="btn-search" type="button" class="btn btn--icon cmdbar__search-toggle"
+              aria-controls="search-form" aria-expanded="false" aria-label="Search">
+        <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+      </button>
+      <button id="btn-settings" type="button" class="btn btn--icon" aria-label="Settings">
+        <svg class="icon" aria-hidden="true"><use href="#i-gear"/></svg>
+      </button>
+      <button id="btn-fullscreen" type="button" class="btn btn--icon" aria-pressed="false" aria-label="Fullscreen">
+        <svg class="icon" aria-hidden="true"><use href="#i-expand"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- B/C/D. STAGE: left layers · globe · right intelligence -->
+  <main id="stage">
+
+    <aside id="panel-layers" class="panel-side" aria-label="Data layers" inert>
+      <div class="panel-side__inner">
+        <div class="panel-head">
+          <h2 class="panel-head__title"><span class="panel-head__idx">01</span>Data layers</h2>
+          <button id="btn-layers-close" type="button" class="btn btn--icon btn--small" aria-label="Close layers panel">
+            <svg class="icon" aria-hidden="true"><use href="#i-chevron-left"/></svg>
+          </button>
+        </div>
+
+        <section class="section" aria-label="Layers">
+          <div id="layer-list-host"></div>
+        </section>
+
+        <section class="section" aria-labelledby="h-tracked">
+          <h3 class="section__title" id="h-tracked">Tracked</h3>
+          <div id="tracked-list" class="tracked"></div>
+        </section>
+
+        <section class="section" aria-labelledby="h-honesty">
+          <h3 class="section__title" id="h-honesty">Reading the feed state</h3>
+          <p class="note"><span class="chip chip--sim">Simulated</span> fake sample data for testing, ringed in amber on the map.</p>
+          <p class="note" style="margin-top:.5rem"><span class="chip chip--off">Not connected</span> a real source is planned but not wired up yet. No data is shown for it.</p>
+          <p class="note" style="margin-top:.5rem"><span class="chip chip--local">Local</span> your own data, stored in this browser.</p>
+        </section>
+      </div>
+    </aside>
+
+    <div class="globe-wrap">
+      <section id="globe" aria-label="3D globe. Drag to rotate, pinch or scroll to zoom, tap a marker for details."></section>
+
+      <div id="sim-badge" class="globe-badge" hidden>Simulated data on screen</div>
+
+      <div class="globe-controls" role="group" aria-label="Globe controls">
+        <button id="btn-home" type="button" class="btn btn--icon" aria-label="Fly to default view" title="Default view">
+          <svg class="icon" aria-hidden="true"><use href="#i-home"/></svg>
+        </button>
+        <button id="btn-north" type="button" class="btn btn--icon" aria-label="Point north up" title="North up">
+          <svg class="icon" aria-hidden="true"><use href="#i-north"/></svg>
+        </button>
+        <button id="btn-intel" type="button" class="btn btn--icon" aria-controls="panel-intel" aria-pressed="false" aria-label="Entity intelligence panel" title="Details panel">
+          <svg class="icon" aria-hidden="true"><use href="#i-panel"/></svg>
+        </button>
+      </div>
+
+      <div id="toasts" class="toast-region" role="status" aria-live="polite"></div>
+      <div id="fatal" class="fatal" hidden></div>
+    </div>
+
+    <aside id="panel-intel" class="panel-side" aria-label="Entity intelligence" inert>
+      <div class="panel-side__inner">
+        <div class="panel-head">
+          <h2 class="panel-head__title"><span class="panel-head__idx">02</span>Entity intelligence</h2>
+          <button id="btn-intel-close" type="button" class="btn btn--icon btn--small" aria-label="Close details panel">
+            <svg class="icon" aria-hidden="true"><use href="#i-close"/></svg>
+          </button>
+        </div>
+        <div id="intel-body"></div>
+      </div>
+    </aside>
+
+    <button id="scrim" type="button" aria-label="Close layers panel" hidden></button>
+  </main>
+
+  <!-- E. BOTTOM TELEMETRY -->
+  <footer class="telemetry" aria-label="Telemetry">
+    <div class="tele__item tele__item--wide"><span class="tele__k">CTR</span><span id="t-ctr" class="tele__v">—</span></div>
+    <div class="tele__item tele__item--desktop"><span class="tele__k">CUR</span><span id="t-cur" class="tele__v">—</span></div>
+    <div class="tele__item"><span class="tele__k">ALT</span><span id="t-alt" class="tele__v">—</span></div>
+    <div class="tele__item"><span class="tele__k">LYR</span><span id="t-lyr" class="tele__v">—</span></div>
+    <div class="tele__item"><span class="tele__k">ENT</span><span id="t-ent" class="tele__v">—</span></div>
+    <div class="tele__item"><span class="tele__k">FEED</span><span id="t-feed" class="tele__v">—</span></div>
+    <div class="tele__item tele__item--2"><span class="tele__k">REFRESH</span><span id="t-ref" class="tele__v">—</span></div>
+    <div class="tele__item tele__item--wide"><span class="tele__k">SYNC</span><span id="t-sync" class="tele__v">—</span></div>
+    <div class="tele__item tele__item--desktop"><span class="tele__k">PERF</span><span id="t-perf" class="tele__v">—</span></div>
+  </footer>
+</div>
+
+<p id="sr-status" class="sr-only" role="status" aria-live="polite"></p>
+
+<!-- SETTINGS -->
+<dialog id="settings" class="settings" aria-labelledby="settings-title">
+  <div class="panel-head">
+    <h2 class="panel-head__title" id="settings-title">Settings</h2>
+    <button id="set-close" type="button" class="btn btn--icon btn--small" aria-label="Close settings">
+      <svg class="icon" aria-hidden="true"><use href="#i-close"/></svg>
+    </button>
+  </div>
+
+  <div class="settings__body">
+    <section class="section" aria-labelledby="sg-globe">
+      <h3 class="section__title" id="sg-globe">Globe rendering</h3>
+      <div class="settings__row"><label class="settings__label" for="set-basemap">Basemap<span class="settings__help">OpenStreetMap needs internet. Natural Earth II ships with Cesium and is coarse but dependable.</span></label><select id="set-basemap" class="field"></select></div>
+      <div class="settings__row"><label class="settings__label" for="set-dim">Dim basemap<span class="settings__help">Darkens the map so markers stand out.</span></label><label class="switch"><input id="set-dim" type="checkbox" role="switch"><span class="switch__ui"></span></label></div>
+      <div class="settings__row"><label class="settings__label" for="set-lighting">Day / night lighting<span class="settings__help">Shades the globe by the sun's current position.</span></label><label class="switch"><input id="set-lighting" type="checkbox" role="switch"><span class="switch__ui"></span></label></div>
+      <div class="settings__row"><label class="settings__label" for="set-atmosphere">Atmosphere glow</label><label class="switch"><input id="set-atmosphere" type="checkbox" role="switch"><span class="switch__ui"></span></label></div>
+      <div class="settings__row"><label class="settings__label" for="set-resolution">Render quality<span class="settings__help">Battery saver draws fewer pixels. High uses your screen's full resolution.</span></label>
+        <select id="set-resolution" class="field"><option value="battery">Battery saver</option><option value="standard">Standard</option><option value="high">High (sharpest)</option></select></div>
+    </section>
+
+    <section class="section" aria-labelledby="sg-view">
+      <h3 class="section__title" id="sg-view">Default location</h3>
+      <p class="note" style="margin-bottom:.5rem">Current default: <span id="set-default-view" class="mono"></span></p>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <button id="set-use-current" type="button" class="btn">Use current view</button>
+        <button id="set-fly-default" type="button" class="btn">Fly to default</button>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="sg-data">
+      <h3 class="section__title" id="sg-data">Data</h3>
+      <div class="settings__row"><label class="settings__label" for="set-simulation">Simulation mode<span class="settings__help">Shows fake sample entities (marked SIMULATED) so you can test the globe. Turn off to see only real data.</span></label><label class="switch"><input id="set-simulation" type="checkbox" role="switch"><span class="switch__ui"></span></label></div>
+      <div class="settings__row"><label class="settings__label" for="set-refresh">Refresh interval<span class="settings__help">How often simulated positions update. Real feeds will get their own intervals in Phase 2.</span></label><select id="set-refresh" class="field"></select></div>
+    </section>
+
+    <section class="section" aria-labelledby="sg-ui">
+      <h3 class="section__title" id="sg-ui">Interface</h3>
+      <div class="settings__row"><label class="settings__label" for="set-density">Density</label>
+        <select id="set-density" class="field"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></div>
+      <div class="settings__row"><label class="settings__label" for="set-clock12">12-hour local clock</label><label class="switch"><input id="set-clock12" type="checkbox" role="switch"><span class="switch__ui"></span></label></div>
+      <div class="settings__row"><label class="settings__label" for="set-timestamps">Timestamps in panels<span class="settings__help">Top bar always shows both UTC and local time.</span></label>
+        <select id="set-timestamps" class="field"><option value="utc">UTC</option><option value="local">Local time</option></select></div>
+    </section>
+
+    <section class="section" aria-labelledby="sg-src">
+      <h3 class="section__title" id="sg-src">Data sources <span class="dim">(read-only reference)</span></h3>
+      <p class="note" style="margin-bottom:.5rem">Real sources are documented here but not connected in Phase 1. No keys or secrets are ever stored in this browser.</p>
+      <div id="set-sources"></div>
+    </section>
+  </div>
+
+  <div class="settings__foot">
+    <button id="set-reset" type="button" class="btn btn--danger">Reset all</button>
+    <button type="button" class="btn btn--primary" data-close>Done</button>
+  </div>
+</dialog>
+
+<noscript>
+  <p style="padding:1rem;color:#d6e4f0">God's Eye Control needs JavaScript to draw the globe.</p>
+</noscript>
+
+</body>
+</html>
