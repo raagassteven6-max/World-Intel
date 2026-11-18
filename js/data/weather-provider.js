@@ -91,6 +91,7 @@ export function createWeatherProvider({ getPoints, fetchImpl, now, setTimer, cle
         longitude: points.map((p) => p.lon.toFixed(3)).join(','),
         current: CURRENT, wind_speed_unit: 'kmh', timezone: 'GMT',
       });
+      lastAsked.at = clock();                 // count the attempt, so a failing feed is not re-asked on every camera move
       const { data } = await fetchJson(`${url}?${q}`, { fetchImpl, timeoutMs: 12_000 });
       const records = normalizeWeather(points, data);
       if (!records) throw new FeedError('Open-Meteo sent an answer in an unexpected shape, so it was ignored.', { kind: 'bad_response' });
