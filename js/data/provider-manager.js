@@ -28,16 +28,17 @@ export const STATE = {
   OFF: 'off',
   NOT_CONNECTED: 'not_connected',
   ON_DEMAND: 'on_demand',
+  CONNECTING: 'connecting',
 };
 
 export const STATE_LABEL = {
   live: 'Live', simulated: 'Simulated', local: 'Local', stale: 'Stale',
-  error: 'Error', off: 'Off', not_connected: 'Not connected', on_demand: 'On demand',
+  error: 'Error', off: 'Off', not_connected: 'Not connected', on_demand: 'On demand', connecting: 'Connecting',
 };
 
 export const STATE_CHIP = {
   live: 'chip--live', simulated: 'chip--sim', local: 'chip--local', stale: 'chip--warn',
-  error: 'chip--err', off: 'chip--off', not_connected: 'chip--off', on_demand: 'chip--local',
+  error: 'chip--err', off: 'chip--off', not_connected: 'chip--off', on_demand: 'chip--local', connecting: 'chip--off',
 };
 
 const KIND_PRIORITY = { live: 0, local: 1, simulated: 2 };
@@ -59,7 +60,29 @@ export function createProviderManager({ sink }) {
     list: () => [...providers],
 
     startKind(kind) { providers.filter((p) => p.kind === kind && !p.running).forEach((p) => p.start(ctx)); emitter.emit('change'); },
-    stopKind(kind) { providers.filter((p) => p.kind === kind && p.running).forEach((p) => p.stop()); emitter.emit('change'); },
+
+    /**
+     * Make reality match the settings. Safe to call any time.
+     *   live        true  -> try to start every live source (a source missing something, e.g. the proxy, stays idle and says why)
+     *   simulation  true  -> run simulated stand-ins, but NEVER on a layer where a real source is running:
+     *                        real data and fake data must not be mixed on one layer.
+     */
+    reconcile({ live, simulation }) {
+      for (const p of providers.filter((x) => x.kind === 'live')) {
+        if (!live) { if (p.running) p.stop(); p.idleReason = null; continue; }
+        const missing = p.requires?.() ?? null;          // e.g. no proxy address yet, or the layer is switched off
+        if (missing) { if (p.running) p.stop(); p.idleReason = missing; }
+        else if (!p.running) p.start(ctx);
+      }
+      const liveLayers = new Set(providers.filter((x) => x.kind === 'live' && (x.running || x.layerHidden?.())).map((x) => x.layerId));
+      for (const p of providers.filter((x) => x.kind === 'simulated')) {
+        const want = simulation && !liveLayers.has(p.layerId);
+        if (want && !p.running) p.start(ctx);
+        else if (!want && p.running) p.stop();
+      }
+      emitter.emit('change');
+    },
+
     startAll() { providers.filter((p) => !p.running).forEach((p) => p.start(ctx)); emitter.emit('change'); },
 
     setSimulationInterval(sec) { providers.forEach((p) => p.setIntervalMs?.(sec * 1000)); },
@@ -70,9 +93,15 @@ export function createProviderManager({ sink }) {
     statusOf(layerId) {
       const p = active(layerId);
       if (p) {
-        return { state: p.state, provider: p, source: p.name, attribution: p.attribution, lastUpdate: p.lastUpdate, error: p.error ?? null };
+        const idle = p.kind !== 'live' ? providers.find((x) => x.kind === 'live' && x.layerId === layerId && x.idleReason) : null;
+        const attribution = idle ? `${p.attribution}. Real source idle: ${idle.idleReason}` : p.attribution;
+        return { state: p.state, provider: p, source: p.name, attribution, lastUpdate: p.lastUpdate, error: p.error ?? null };
       }
       const desc = catalogByLayer(layerId);
+      const idle = providers.find((x) => x.kind === 'live' && x.layerId === layerId && x.idleReason);
+      if (idle) {
+        return { state: STATE.NOT_CONNECTED, provider: idle, source: idle.name, attribution: idle.idleReason, lastUpdate: null, error: null };
+      }
       if (desc?.onDemand) return { state: STATE.ON_DEMAND, provider: null, source: desc.name, attribution: desc.attribution, lastUpdate: null, error: null };
       return {
         state: desc ? STATE.NOT_CONNECTED : STATE.OFF,
@@ -94,6 +123,7 @@ export function createProviderManager({ sink }) {
         simulated: count(STATE.SIMULATED),
         local: count(STATE.LOCAL),
         stale: count(STATE.STALE),
+        connecting: count(STATE.CONNECTING),
         error: count(STATE.ERROR),
         running: running.length,
         lastSync: times.length ? Math.max(...times) : null,

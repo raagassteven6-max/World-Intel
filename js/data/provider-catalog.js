@@ -1,16 +1,31 @@
 // provider-catalog.js — the documented list of real data sources we plan to connect.
 //
-// IMPORTANT: this file only DESCRIBES sources. Nothing here makes a network request,
-// so in Phase 1 every real source honestly shows as "NOT CONNECTED".
-// The facts below were checked against each provider's own documentation on 2026-10-30
-// where a page was reachable; items marked "verify" must be tested from a real browser
-// before Phase 2 relies on them (especially CORS — whether a web page is allowed to call the API).
+// IMPORTANT: this file only DESCRIBES sources. Nothing here makes a network request.
+// Which sources are actually connected is decided by the provider files (usgs-provider.js, adsb-provider.js,
+// celestrak-provider.js) and reported honestly by provider-manager.js.
+// Facts were checked against each provider's documentation on 2026-10-30; the CORS notes were cross-checked in
+// Phase 2 against the MIT-licensed gods-eye-view source (see THIRD_PARTY_NOTICES.md). Nothing could be tested from
+// a live browser in the build environment, so every "works from a web page" claim is marked as such.
 
 export const CATALOG = [
   {
+    id: 'adsblol',
+    layerId: 'aircraft', layerLabel: 'Aircraft',
+    name: 'adsb.lol (community ADS-B) — used in Phase 2',
+    endpoint: 'https://api.adsb.lol/v2/lat/{lat}/lon/{lon}/dist/{nm}  (called through your proxy)',
+    auth: 'None.',
+    rateLimit: 'Free, volunteer-run service with no published number. We ask at most every 15 s, one small area, and the proxy caches 10 s.',
+    updateFrequency: 'About every second at the source; we poll every 15 s.',
+    restrictions: 'Regional only: up to 250 nautical miles around the view centre, not worldwide. Coverage depends on volunteer receivers. Origin/destination are not provided.',
+    cors: 'Not documented — so the call goes through the proxy (also how gods-eye-view does it, via its own server).',
+    proxy: 'YES — the Cloudflare Worker in worker/worker.js (no secret needed).',
+    attribution: 'Aircraft: adsb.lol contributors (ODbL 1.0)',
+    phase: 'Phase 2 (needs the proxy address)',
+  },
+  {
     id: 'opensky',
     layerId: 'aircraft', layerLabel: 'Aircraft',
-    name: 'OpenSky Network',
+    name: 'OpenSky Network (alternative — not implemented)',
     endpoint: 'https://opensky-network.org/api/states/all (optional bbox: lamin, lomin, lamax, lomax)',
     auth: 'Anonymous allowed (most recent states only). Authenticated access uses OAuth2 client-credentials only — the client secret must never be in frontend code.',
     rateLimit: 'Credit based. Anonymous: 400 credits/day. Standard account: 4,000/day. A small bbox costs 1 credit; a global request costs 4. HTTP 429 when exhausted.',
@@ -19,7 +34,7 @@ export const CATALOG = [
     cors: 'Not stated in the docs — verify from a browser in Phase 2.',
     proxy: 'Not for anonymous use if CORS allows it. YES (Cloudflare Worker) for authenticated use, to hold the OAuth secret.',
     attribution: 'Aircraft data: The OpenSky Network',
-    phase: 'Phase 2',
+    phase: 'Not implemented (adsb.lol is used instead)',
   },
   {
     id: 'aisstream',
@@ -33,7 +48,7 @@ export const CATALOG = [
     cors: 'Not applicable: browser connections are not permitted.',
     proxy: 'YES — a Cloudflare Worker (WebSocket relay) that holds the key and forwards only what the app needs.',
     attribution: 'Vessel data: AISStream.io',
-    phase: 'Phase 2 (needs the Worker)',
+    phase: 'Planned — not built yet (needs a WebSocket relay Worker)',
   },
   {
     id: 'celestrak',
@@ -43,11 +58,11 @@ export const CATALOG = [
     auth: 'None.',
     rateLimit: 'No hard number published that we found; CelesTrak says data is not updated more often than every 2 hours and asks clients to check only a few times per day. Be conservative.',
     updateFrequency: 'Element sets change roughly every few hours. Positions are then calculated in the browser (SGP4), not downloaded.',
-    restrictions: 'Do not poll. Cache the element sets (e.g. 6 h). Needs a small SGP4 library (satellite.js) in Phase 2.',
-    cors: 'Not stated in the docs — verify from a browser in Phase 2.',
-    proxy: 'Only if CORS blocks the browser.',
+    restrictions: 'Do not poll. Elements are cached for 6 h in this browser. Positions are CALCULATED here with the satellite.js (SGP4) library — not observed. Groups used: stations, visual.',
+    cors: 'No CORS headers (stated in the gods-eye-view source) — browsers cannot call it directly.',
+    proxy: 'YES — the Cloudflare Worker in worker/worker.js (no secret needed).',
     attribution: 'Orbital elements: CelesTrak',
-    phase: 'Phase 2',
+    phase: 'Phase 2 (needs the proxy address)',
   },
   {
     id: 'usgs',
@@ -58,10 +73,10 @@ export const CATALOG = [
     rateLimit: 'No registration or key. Shared public service — poll no faster than about once a minute.',
     updateFrequency: 'Feeds refresh every minute or few minutes.',
     restrictions: 'US Government data; credit USGS.',
-    cors: 'Widely used directly from web pages — still verify in Phase 2.',
-    proxy: 'No.',
+    cors: 'gods-eye-view calls this feed straight from the browser, so it should work from GitHub Pages — confirm on your phone.',
+    proxy: 'No. Phase 2 uses the "M2.5+ past day" feed, polled every 2 minutes.',
     attribution: 'Earthquake data: U.S. Geological Survey',
-    phase: 'Phase 2',
+    phase: 'Phase 2 (active)',
   },
   {
     id: 'firms',
@@ -75,7 +90,7 @@ export const CATALOG = [
     cors: 'Unknown — irrelevant, because the key forces a proxy.',
     proxy: 'YES — Cloudflare Worker holding the MAP_KEY.',
     attribution: 'Fire data: NASA FIRMS',
-    phase: 'Phase 2/4 (needs the Worker)',
+    phase: 'Planned — not built yet (needs a Worker holding the key)',
   },
   {
     id: 'openmeteo',
@@ -89,7 +104,7 @@ export const CATALOG = [
     cors: 'Designed for browser use — verify in Phase 2.',
     proxy: 'No. Note: it answers per point, so the layer would show weather for chosen points, not a global field.',
     attribution: 'Weather data: Open-Meteo.com (CC-BY 4.0)',
-    phase: 'Phase 2/4',
+    phase: 'Planned — not built yet',
   },
   {
     id: 'cameras',
