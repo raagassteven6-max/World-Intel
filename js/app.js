@@ -20,6 +20,9 @@ import { createLocalLocationsProvider } from './data/local-locations-provider.js
 import { createUsgsProvider } from './data/usgs-provider.js';
 import { createAdsbProvider } from './data/adsb-provider.js';
 import { createCelestrakProvider } from './data/celestrak-provider.js';
+import { createAisProvider } from './data/ais-provider.js';
+import { createFirmsProvider } from './data/firms-provider.js';
+import { createWeatherProvider } from './data/weather-provider.js';
 import { createTracker, mountTrackedList } from './tracking.js';
 import { createIntelPanel } from './intel-panel.js';
 import { mountTelemetry } from './telemetry.js';
@@ -156,6 +159,20 @@ function main() {
   providers.register(createUsgsProvider({ isVisible: shown('earthquakes') }));
   providers.register(createAdsbProvider({ getProxy, getView, isVisible: shown('aircraft') }));
   providers.register(createCelestrakProvider({ getProxy, isVisible: shown('satellites') }));
+  providers.register(createAisProvider({ getProxy, getView, isVisible: shown('ships') }));
+  providers.register(createFirmsProvider({ getProxy, getView, isVisible: shown('wildfires') }));
+  // Weather is asked about a few chosen points: the middle of the screen + each saved location.
+  const weatherPoints = () => {
+    const v = getView();
+    const pts = [];
+    if (Number.isFinite(v.lat) && Number.isFinite(v.lon)) pts.push({ id: 'openmeteo:center', name: 'Weather at screen centre', lat: v.lat, lon: v.lon });
+    for (const r of store.records.values()) {
+      if (r.type === 'location') pts.push({ id: `openmeteo:loc:${r.id}`, name: `Weather — ${r.name}`, lat: r.lat, lon: r.lon });
+    }
+    return pts.slice(0, 10);
+  };
+  const weather = createWeatherProvider({ getPoints: weatherPoints, isVisible: shown('weather') });
+  providers.register(weather);
 
   const tracker = createTracker({ globe, store });
 
@@ -224,8 +241,8 @@ function main() {
   };
   whenChanged(['simulation', 'liveFeeds'], reconcile);
   whenChanged(['proxyUrl'], (v) => {
-    ['adsblol', 'celestrak'].forEach((id) => { const p = providers.get(id); if (p?.running) p.stop(); });   // restart with the new address
-    reconcile(v);
+    ['adsblol', 'celestrak', 'aisstream', 'firms'].forEach((id) => { const p = providers.get(id); if (p?.running) p.stop(); });   // restart with the new address
+    providers.retryAll();
   });
   whenChanged(['refreshSec'], (v) => providers.setSimulationInterval(v.refreshSec));
   whenChanged(['visibleLayers'], (v) => {
@@ -243,6 +260,15 @@ function main() {
     $('sim-badge').hidden = providers.summary().simulated === 0;
   });
   setInterval(() => { if (!document.hidden) layerPanel.render(); }, 1000);
+
+  // ---- weather follows the screen centre (debounced; the provider itself decides whether a refresh is worthwhile)
+  let weatherTimer = null;
+  globe.on('camera', () => { clearTimeout(weatherTimer); weatherTimer = setTimeout(() => weather.maybeRefresh(), 3000); });
+  setInterval(() => { if (!document.hidden) weather.maybeRefresh(); }, 30000);   // also notices newly saved locations
+
+  // ---- sources that stepped aside (no key yet) get another chance when you return to the tab or press "Test proxy"
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) providers.retryAll(); });
+  $('set-proxy-test').addEventListener('click', () => setTimeout(() => providers.retryAll(), 2500));
 
   // ---- friendly messages from the globe
   globe.on('basemapfail', ({ key }) => toast(`Basemap "${key}" could not load. Using OpenStreetMap instead.`, 'warn'));

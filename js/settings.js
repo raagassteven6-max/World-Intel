@@ -7,6 +7,7 @@
 import { createEmitter, el, formatCoord } from './util.js';
 import { LAYER_DEFS, BASEMAPS, REFRESH_CHOICES } from './config.js';
 import { STATE_LABEL, STATE_CHIP } from './data/provider-manager.js';
+import { fetchJson, proxyUrl } from './data/net.js';
 // (STATE_LABEL / STATE_CHIP map a provider state like "not_connected" to its on-screen word and colour class)
 
 const KEY = 'gec.settings.v1';
@@ -136,7 +137,25 @@ export function mountSettingsDialog({ dialog, settings, getCurrentView, flyToDef
 
   function syncFromSettings() {
     const s = settings.get();
-    for (const [id, key, kind] of controls) {
+    // "Test proxy": says exactly which step fails instead of one vague error.
+  $('set-proxy-test').addEventListener('click', async () => {
+    const out = $('set-proxy-result'); const base = settings.get().proxyUrl;
+    if (!base) { out.textContent = 'Enter the proxy address first (it must start with https://).'; return; }
+    out.textContent = 'Testing…';
+    try {
+      const { data } = await fetchJson(proxyUrl(base, 'health', { deep: 1 }), { timeoutMs: 15000 });
+      const bad = [data.adsb !== 'ok' && `aircraft source (adsb.lol): ${data.adsb}`, data.celestrak !== 'ok' && `satellite source (CelesTrak): ${data.celestrak}`].filter(Boolean);
+      out.textContent = bad.length
+        ? `Proxy reachable and your site is allowed, but the Worker cannot reach: ${bad.join('; ')}. Try again in a minute.`
+        : 'Proxy works: reachable, your site is allowed, and both data sources answered.';
+    } catch (err) {
+      out.textContent = err.kind === 'network'
+        ? 'Could not connect. Check: (1) the address is exactly the workers.dev address shown in Cloudflare, (2) the Worker is deployed, (3) ALLOWED_ORIGIN is set (an unset or wrong value can also look like this on older copies of the Worker). Open the address + /health in a new tab to see.'
+        : err.message;
+    }
+  });
+
+  for (const [id, key, kind] of controls) {
       const node = $(id);
       if (kind === 'checked') node.checked = Boolean(s[key]);
       else node.value = String(s[key]);
