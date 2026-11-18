@@ -55,7 +55,11 @@ async function request(url, { timeoutMs = 10_000, fetchImpl, signal, headers } =
     if (!res.ok) {
       const retryAfterMs = parseRetryAfter(res.headers?.get?.('retry-after'));
       if (res.status === 429) throw new FeedError('Rate limited by the data provider (HTTP 429).', { kind: 'rate_limit', status: 429, retryAfterMs });
-      throw new FeedError(`Data provider answered HTTP ${res.status}.`, { kind: 'http', status: res.status, retryAfterMs });
+      let why = ''; let code = null;                          // our own proxy explains itself in JSON: {error, message}
+      try { const j = JSON.parse((await res.text()).slice(0, 2000)); if (typeof j?.message === 'string') why = ` ${j.message}`; code = j?.error ?? null; } catch { /* not JSON: fine */ }
+      // The proxy works but has no key for this source yet: not a failure, just "not set up".
+      if (code === 'key_missing') throw new FeedError(why.trim() || 'The proxy has no key for this source yet.', { kind: 'not_configured', status: res.status });
+      throw new FeedError(`Data provider answered HTTP ${res.status}.${why}`, { kind: 'http', status: res.status, retryAfterMs });
     }
     return res;
   } catch (err) {

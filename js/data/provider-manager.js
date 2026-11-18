@@ -46,7 +46,19 @@ const KIND_PRIORITY = { live: 0, local: 1, simulated: 2 };
 export function createProviderManager({ sink }) {
   const providers = [];
   const emitter = createEmitter();
-  const ctx = { sink, notify: () => emitter.emit('change') };
+  let wanted = null;          // last settings given to reconcile()
+  let liveSig = '';           // which real sources currently hold a layer
+  let reconciling = false;
+  const holders = () => providers.filter((x) => x.kind === 'live' && (x.running || x.layerHidden?.())).map((x) => x.id).sort().join();
+  // A real source can step aside by itself (e.g. its proxy has no key yet). When that changes who holds a layer,
+  // re-balance so the simulated stand-in on that layer comes back (labelled) instead of leaving a silent gap.
+  const ctx = {
+    sink,
+    notify: () => {
+      if (wanted && !reconciling && holders() !== liveSig) api.reconcile(wanted);
+      else emitter.emit('change');
+    },
+  };
 
   function active(layerId) {
     return providers
@@ -54,7 +66,7 @@ export function createProviderManager({ sink }) {
       .sort((a, b) => KIND_PRIORITY[a.kind] - KIND_PRIORITY[b.kind])[0];
   }
 
-  return {
+  const api = {
     register(provider) { providers.push(provider); },
     get: (id) => providers.find((p) => p.id === id),
     list: () => [...providers],
@@ -68,6 +80,7 @@ export function createProviderManager({ sink }) {
      *                        real data and fake data must not be mixed on one layer.
      */
     reconcile({ live, simulation }) {
+      wanted = { live, simulation }; reconciling = true;
       for (const p of providers.filter((x) => x.kind === 'live')) {
         if (!live) { if (p.running) p.stop(); p.idleReason = null; continue; }
         const missing = p.requires?.() ?? null;          // e.g. no proxy address yet, or the layer is switched off
@@ -80,8 +93,12 @@ export function createProviderManager({ sink }) {
         if (want && !p.running) p.start(ctx);
         else if (!want && p.running) p.stop();
       }
+      reconciling = false; liveSig = holders();
       emitter.emit('change');
     },
+
+    /** Forget every earlier step-aside and re-check everything (tab refocused, "Test proxy", proxy address changed). */
+    retryAll() { providers.forEach((p) => p.retry?.()); if (wanted) api.reconcile(wanted); },
 
     startAll() { providers.filter((p) => !p.running).forEach((p) => p.start(ctx)); emitter.emit('change'); },
 
@@ -133,4 +150,5 @@ export function createProviderManager({ sink }) {
 
     on: emitter.on,
   };
+  return api;
 }

@@ -46,16 +46,21 @@ export function createLiveProvider({
   let lastSuccess = null;
   let heldIds = new Set();
   let runToken = 0;
+  let asideUntil = 0;                       // a source that stepped aside (e.g. no key) stays quiet until then, unless retry() is called
+  let asideReason = null;
+  const blocked = () => requires() ?? (now() < asideUntil ? asideReason : null);
 
   const provider = {
     id, layerId, name, kind: 'live', attribution,
     state: STATE.OFF, lastUpdate: null, error: null, running: false, idleReason: null,
-    intervalMs, source, requires,
+    intervalMs, source, requires: blocked,
+    /** Deliberate retry (tab refocused, "Test proxy" pressed, new proxy address): forget an earlier step-aside. */
+    retry() { asideUntil = 0; },
     /** True when the only reason we are idle is that the user hid the layer. A simulated stand-in must not appear then. */
     layerHidden: () => !isVisible(),
 
     start(c) {
-      const missing = requires();
+      const missing = blocked();
       if (missing) {                       // not an error: the source is simply not usable yet
         provider.idleReason = missing;
         provider.running = false;
@@ -142,6 +147,17 @@ export function createLiveProvider({
       provider.error = out.warning ?? null;
     } catch (err) {
       if (token !== runToken) return;
+      if (err instanceof FeedError && err.kind === 'not_configured') {
+        // Nothing is broken: the source just is not set up (e.g. no API key on the proxy yet).
+        // Step aside completely so the layer shows its honest "not connected" / simulated state with the reason.
+        inFlight = false;
+        const reason = err.message;
+        asideReason = reason; asideUntil = now() + 10 * 60_000;
+        provider.stop();
+        provider.idleReason = reason;
+        ctx.notify();
+        return;
+      }
       applyFailure(err);
       const cool = err instanceof FeedError ? cooldownFor(err) : null;
       nextIn = cool ?? Math.min(BACKOFF_MAX_MS, provider.intervalMs * 2 ** Math.min(failures, 5));
