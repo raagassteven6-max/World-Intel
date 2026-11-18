@@ -78,6 +78,8 @@ export function mountLayerPanel({ root, layers, store, providers, settings }) {
     const chip = el('span', { class: 'chip chip--off', text: '…' });
     const updated = el('dd', { text: '—' });
     const source = el('dd', { text: '—' });
+    const problem = el('dd', { class: 'layer__problem', role: 'status' });          // plain-English reason when a feed is stale / failing
+    const problemLabel = el('dt', { text: 'Problem', hidden: true });
 
     list.append(el('li', { class: 'layer', style: `--layer-color:${def.color}`, dataset: { layer: def.id } },
       el('div', { class: 'layer__head' },
@@ -88,8 +90,9 @@ export function mountLayerPanel({ root, layers, store, providers, settings }) {
       el('dl', { class: 'layer__meta' },
         el('dt', { text: 'Feed' }), el('dd', {}, chip),
         el('dt', { text: 'Updated' }), updated,
-        el('dt', { text: 'Source' }), source)));
-    refs.set(def.id, { input, count, chip, updated, source });
+        el('dt', { text: 'Source' }), source,
+        problemLabel, problem)));
+    refs.set(def.id, { input, count, chip, updated, source, problem, problemLabel });
   }
   root.replaceChildren(list);
 
@@ -104,6 +107,9 @@ export function mountLayerPanel({ root, layers, store, providers, settings }) {
       r.chip.textContent = STATE_LABEL[st.state];
       r.updated.textContent = st.lastUpdate ? `${formatTime(st.lastUpdate, s)} · ${formatAge(st.lastUpdate)}` : '—';
       r.source.textContent = st.attribution;
+      const why = st.error ?? null;
+      if (r.problem.textContent !== (why ?? '')) r.problem.textContent = why ?? '';
+      r.problem.hidden = !why; r.problemLabel.hidden = !why;
       if (r.input.checked !== layers.isVisible(def.id)) r.input.checked = layers.isVisible(def.id);
     }
   }

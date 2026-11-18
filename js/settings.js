@@ -18,6 +18,8 @@ export const DEFAULTS = {
   atmosphere: true,
   resolution: 'standard',            // 'battery' | 'standard' | 'high'
   defaultView: { lon: 122.0, lat: 12.0, height: 15000000 },  // same start view as the original prototype
+  liveFeeds: true,                   // try real data sources
+  proxyUrl: '',                      // address of YOUR Cloudflare Worker (an address, never a secret)
   simulation: true,
   refreshSec: 2,
   density: 'comfortable',            // 'comfortable' | 'compact'
@@ -29,6 +31,20 @@ export const DEFAULTS = {
 const pick = (v, allowed, fallback) => (allowed.includes(v) ? v : fallback);
 const bool = (v, fallback) => (typeof v === 'boolean' ? v : fallback);
 const num = (v, lo, hi, fallback) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback);
+
+/** Accept only a clean https address (or http://localhost for testing); anything else becomes '' (= no proxy). */
+export function cleanProxyUrl(v) {
+  if (typeof v !== 'string') return '';
+  const text = v.trim();
+  if (!text || text.length > 200) return '';
+  try {
+    const u = new URL(text);
+    const local = u.hostname === 'localhost' || u.hostname === '127.0.0.1';
+    if (!(u.protocol === 'https:' || (u.protocol === 'http:' && local))) return '';
+    if (u.username || u.password || u.search || u.hash) return '';          // no credentials/keys smuggled into the address
+    return `${u.origin}${u.pathname.replace(/\/+$/, '')}`;
+  } catch { return ''; }
+}
 
 /** Turn anything (including garbage) into a complete, valid settings object. */
 export function sanitize(raw) {
@@ -47,6 +63,8 @@ export function sanitize(raw) {
       lat: num(dv.lat, -90, 90, d.defaultView.lat),
       height: num(dv.height, 200, 60000000, d.defaultView.height),
     },
+    liveFeeds: bool(r.liveFeeds, d.liveFeeds),
+    proxyUrl: cleanProxyUrl(r.proxyUrl),
     simulation: bool(r.simulation, d.simulation),
     refreshSec: REFRESH_CHOICES.includes(r.refreshSec) ? r.refreshSec : d.refreshSec,
     density: pick(r.density, ['comfortable', 'compact'], d.density),
@@ -102,6 +120,7 @@ export function mountSettingsDialog({ dialog, settings, getCurrentView, flyToDef
     ['set-lighting', 'lighting', 'checked'],
     ['set-atmosphere', 'atmosphere', 'checked'],
     ['set-resolution', 'resolution', 'value'],
+    ['set-live', 'liveFeeds', 'checked'],
     ['set-simulation', 'simulation', 'checked'],
     ['set-refresh', 'refreshSec', 'number'],
     ['set-density', 'density', 'value'],
@@ -122,9 +141,19 @@ export function mountSettingsDialog({ dialog, settings, getCurrentView, flyToDef
       if (kind === 'checked') node.checked = Boolean(s[key]);
       else node.value = String(s[key]);
     }
+    $('set-proxy').value = s.proxyUrl;
     const v = s.defaultView;
     $('set-default-view').textContent = `${formatCoord(v.lon, v.lat, 2)} · ${Math.round(v.height / 1000).toLocaleString('en-US')} km up`;
   }
+
+  // The proxy address is validated: a bad value is refused with a message instead of silently ignored.
+  $('set-proxy').addEventListener('change', (e) => {
+    const typed = e.target.value.trim();
+    const clean = cleanProxyUrl(typed);
+    if (typed && !clean) toast('Proxy address must start with https:// and contain no password or ? parts.', 'warn');
+    settings.set({ proxyUrl: clean });
+    syncFromSettings();
+  });
 
   for (const [id, key, kind] of controls) {
     $(id).addEventListener('change', (e) => {

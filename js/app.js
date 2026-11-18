@@ -17,6 +17,9 @@ import { createProviderManager } from './data/provider-manager.js';
 import { CATALOG } from './data/provider-catalog.js';
 import { createSimulatedProviders } from './data/sample-provider.js';
 import { createLocalLocationsProvider } from './data/local-locations-provider.js';
+import { createUsgsProvider } from './data/usgs-provider.js';
+import { createAdsbProvider } from './data/adsb-provider.js';
+import { createCelestrakProvider } from './data/celestrak-provider.js';
 import { createTracker, mountTrackedList } from './tracking.js';
 import { createIntelPanel } from './intel-panel.js';
 import { mountTelemetry } from './telemetry.js';
@@ -143,6 +146,17 @@ function main() {
   providers.register(locations);
   createSimulatedProviders().forEach((p) => providers.register(p));
 
+  // ---- real data sources (Phase 2). Each decides for itself whether it can run (e.g. needs the proxy address).
+  const getProxy = () => settings.get().proxyUrl;
+  const getView = () => {
+    const c = globe.centerCoordinates();
+    return { lon: c?.lon ?? null, lat: c?.lat ?? null, heightM: globe.cameraHeight() };
+  };
+  const shown = (layer) => () => settings.get().visibleLayers[layer] !== false;
+  providers.register(createUsgsProvider({ isVisible: shown('earthquakes') }));
+  providers.register(createAdsbProvider({ getProxy, getView, isVisible: shown('aircraft') }));
+  providers.register(createCelestrakProvider({ getProxy, isVisible: shown('satellites') }));
+
   const tracker = createTracker({ globe, store });
 
   // ---- panels
@@ -204,12 +218,18 @@ function main() {
   whenChanged(['basemap'], (v) => globe.setBasemap(v.basemap, v.dimBasemap));
   whenChanged(['dimBasemap'], (v) => globe.setDim(v.dimBasemap));
   whenChanged(['lighting', 'atmosphere', 'resolution'], (v) => globe.applyRenderSettings(v));
-  whenChanged(['simulation'], (v) => {
-    if (v.simulation) { providers.startKind('simulated'); providers.setSimulationInterval(v.refreshSec); }
-    else providers.stopKind('simulated');
+  const reconcile = (v) => {
+    providers.reconcile({ live: v.liveFeeds, simulation: v.simulation });
+    providers.setSimulationInterval(v.refreshSec);
+  };
+  whenChanged(['simulation', 'liveFeeds'], reconcile);
+  whenChanged(['proxyUrl'], (v) => {
+    ['adsblol', 'celestrak'].forEach((id) => { const p = providers.get(id); if (p?.running) p.stop(); });   // restart with the new address
+    reconcile(v);
   });
   whenChanged(['refreshSec'], (v) => providers.setSimulationInterval(v.refreshSec));
   whenChanged(['visibleLayers'], (v) => {
+    reconcile(v);                         // real sources stop fetching while their layer is switched off
     for (const def of LAYER_DEFS) {
       if (layers.isVisible(def.id) !== v.visibleLayers[def.id]) layers.setVisible(def.id, v.visibleLayers[def.id]);
     }
@@ -234,8 +254,7 @@ function main() {
 
   // ---- go
   providers.startKind('local');
-  if (settings.get().simulation) providers.startKind('simulated');
-  providers.setSimulationInterval(settings.get().refreshSec);
+  reconcile(settings.get());
   $('sim-badge').hidden = providers.summary().simulated === 0;
 
   // Handle for manual debugging from the browser console (e.g.  __gec.store.records ).

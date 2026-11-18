@@ -15,6 +15,8 @@ const FIELDS = {
   aircraft: [
     ['Callsign', (r) => r.attrs.callsign],
     ['ICAO24', (r) => r.attrs.icao24],
+    ['Registration', (r) => r.attrs.registration],
+    ['Aircraft type', (r) => r.attrs.aircraftType],
     ['Position', pos],
     ['Altitude', (r) => formatAltitude(r.alt)],
     ['Ground speed', (r) => kts(r.attrs.speedKts)],

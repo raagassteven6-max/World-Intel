@@ -33,7 +33,10 @@ export function mountTelemetry({ globe, layers, store, providers, settings }) {
     if (sum.error > 0) return { cls: 'chip--warn', label: 'Degraded', detail: `${sum.error} data source(s) reporting errors.` };
     const recentTileErrors = health.tileErrors >= 5 && Date.now() - health.tileErrorAt < 30000;
     if (recentTileErrors) return { cls: 'chip--warn', label: 'Basemap issue', detail: 'Map tiles are failing to load. Check your connection or choose another basemap in Settings.' };
+    if (sum.stale > 0) return { cls: 'chip--warn', label: 'Stale data', detail: `${sum.stale} data source(s) are showing old data because their latest refresh failed.` };
+    if (sum.live > 0 && sum.simulated > 0) return { cls: 'chip--sim', label: 'Live + sim', detail: `${sum.live} live source(s) connected. Other layers still show simulated sample data (amber).` };
     if (sum.live > 0) return { cls: 'chip--live', label: 'Live', detail: `${sum.live} live source(s) connected.` };
+    if (sum.connecting > 0) return { cls: 'chip--off', label: 'Connecting', detail: 'Waiting for the first data from real sources.' };
     if (sum.simulated > 0) return { cls: 'chip--sim', label: 'Simulation', detail: 'No live feeds connected. Showing simulated sample data.' };
     return { cls: 'chip--off', label: 'No feeds', detail: 'No live feeds connected and simulation is off.' };
   }
